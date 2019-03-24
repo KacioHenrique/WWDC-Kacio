@@ -39,9 +39,10 @@ public func typeforName(_ name:String?) -> TypeGround{
     }
     return TypeGround.Rock
 }
+
 public protocol ButtonElement {
     func sendType(ground:GroundButton)
-    func call()
+    func call(type:ButtonEditor)
 }
 public class GroundButton:SKSpriteNode{
     var typeGround:TypeGround

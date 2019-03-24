@@ -10,6 +10,7 @@ import Foundation
 import SpriteKit
 
 public class MecanicMap: NSObject , MapResponde {
+    
     let rows:Int
     let columns:Int
     var map:MapUpdate?
@@ -18,10 +19,11 @@ public class MecanicMap: NSObject , MapResponde {
     var atualRow:Int = 0
     var paint:SKTileGroup?
     var scene:SKScene
-    var sizeObject:[String:CGSize] = ["Rock" : CGSize(width: 180, height: 150) , "Tree" : CGSize(width: 300, height: 220) , "Flower" : CGSize(width: 60, height: 60)]
+    var sizeObject:[String:CGSize] = ["Rock" : CGSize(width: 180, height: 150) , "Tree" : CGSize(width: 145, height: 180) , "Flower" : CGSize(width: 60, height: 60)]
     var name:String
     var historic:[RedonData] = []
-    init(rows:Int , columns:Int , baseElements:[String] , scene:SKScene , name:String) {
+    var canDraw = true
+    init(rows:Int , columns:Int , baseElements:[String] , scene:GameScene , name:String) {
         self.rows = rows
         self.columns = columns
         self.baseElements = baseElements
@@ -30,25 +32,30 @@ public class MecanicMap: NSObject , MapResponde {
         super.init()
         self.fristGround( rows: rows, columns: columns)
     }
-    func resetTile(col:Int ,row:Int){
+    func removeTile(col:Int ,row:Int){
         guard let element = tileSet!.tileGroups.first(where: {$0.name == self.name }) else {
             fatalError("No \(self.name) tile definition found")
         }
         self.map?.setTileGroup(element, forColumn: col, row: row)
     }
-    func resetMap(){
+    func removeNode(fromRemove node:SKNode){
+        if self.scene.children.contains(node){
+            self.scene.removeChildren(in: [node])
+        }
+    }
+    func deleteFromMap(){
         if historic.count > 0{
-            if historic.last?.type == .tile{
-                if let tilefromReset = historic.last {
-                    resetTile(col: tilefromReset.col! , row: tilefromReset.row!)
+            if let last = self.historic.last{
+                switch last.objectInMap{
+                case .tile(_, let col , let row):
+                            removeTile(col: col, row: row)
+                            historic.removeLast()
+                case .node(let node):
+                    removeNode(fromRemove: node)
+                    historic.removeLast()
                 }
             }
-            else {
-                self.scene.children.last?.removeFromParent()
-            }
-            historic.removeLast()
         }
-       
     }
     func setTextureTile(name:String){
         guard let element = tileSet!.tileGroups.first(where: {$0.name == name }) else {
@@ -57,32 +64,43 @@ public class MecanicMap: NSObject , MapResponde {
         self.paint = element
         self.paint?.name = name
     }
-    func colrow(point: CGPoint, row: Int, column: Int) {
+    func colrow(pointPressed:CGPoint,point: CGPoint, row: Int, column: Int) {
+        if canDraw{
             if let paint = self.paint {
                 if let name = paint.name{
                     if ["Rock","Tree","Flower"].contains(name){
                         
-                        let node = SKSpriteNode(imageNamed:name)
+                        let node = ObjectRemove(imageNamed:name)
                         node.scale(to:sizeObject[name]!)
                         node.position = point
+                        node.delgate = self.scene as! Remove
                         if name == "Flower"{
+                            node.position = pointPressed
                             node.run(SKAction.init(named: name)!)
                         }
+                        node.name = name
+                        node.setValue(SKAttributeValue(size: node.size), forAttribute: "a_size")
+                        node.isUserInteractionEnabled = false
                         self.scene.addChild(node)
-                        self.historic.append(RedonData(name: name, type: .node))
+                        self.historic.append(RedonData(objectInMap: TypeObejectRedon.node(node)))
                     }
                         
                     else{
                         if let name = paint.name{
                             map?.setTileGroup(paint, forColumn: column, row: row)
-                            var tileHistoric = RedonData(name: name, type: .tile)
-                            tileHistoric.col = column
-                            tileHistoric.row = row
-                            self.historic.append(tileHistoric)
+                            if self.historic.count > 0 ,let salve = self.historic.last {
+                                if tileIsNew(col: column, row: row, name:name, object: salve.objectInMap){
+                                    self.historic.append(RedonData(objectInMap: TypeObejectRedon.tile(name, column,row)))
+                                }
+                                
+                            }
+                            else{  self.historic.append(RedonData(objectInMap: TypeObejectRedon.tile(name, column,row)))}
                         }
                     }
                 }
             }
+        }
+        
     }
     
     func pointDraw(point: CGPoint?) {}
@@ -130,7 +148,7 @@ public class MecanicMap: NSObject , MapResponde {
 
 protocol MapResponde{
     func pointDraw(point:CGPoint?)
-    func colrow(point:CGPoint , row:Int , column:Int)
+    func colrow(pointPressed:CGPoint,point:CGPoint , row:Int , column:Int)
 }
 
 class MapUpdate : SKTileMapNode {
@@ -147,11 +165,10 @@ class MapUpdate : SKTileMapNode {
     func touchDown(atPoint pos : CGPoint) {
         let row = self.tileRowIndex(fromPosition: pos)
         let column = self.tileColumnIndex(fromPosition: pos)
-        print(pos)
-      
+        let position = self.centerOfTile(atColumn: column, row: row)
         if (row >= 0 && row < self.numberOfRows && column >= 0 && column < self.numberOfColumns){
             print((row , column))
-            self.delegate?.colrow(point:pos, row: row, column: column)
+            self.delegate?.colrow(pointPressed: pos ,point:position, row: row, column: column)
         }
         
     }

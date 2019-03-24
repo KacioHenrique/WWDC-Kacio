@@ -8,27 +8,33 @@
 
 import SpriteKit
 import GameplayKit
-public class GameScene: SKScene ,ButtonElement {
-    public func call() {
-        self.mecanic?.resetMap()
-    }
-    
+public class GameScene: SKScene , ButtonElement, Remove{
     var cameraNode:SKCameraNode!
     let gesturePinch = UIPinchGestureRecognizer()
     let gestureLongPress = UILongPressGestureRecognizer()
     let buttonUIName:[String] = ["Water","Sand","Rock","Grass","Tree","Flower"]
+    var modoRemover:Bool = false
     var mecanic:MecanicMap?
+    var buttonRemover:ButtonEditorInMap?
+    var buttonUndo:ButtonEditorInMap?
     public override func didMove(to view: SKView) {
         self.setCameraNode()
         setGestures()
         self.initButton(listButton: buttonUIName)
-        mecanic = MecanicMap(rows: 8, columns: 8, baseElements: self.buttonUIName ,scene: self.scene!, name: "Sand")
+        mecanic = MecanicMap(rows: 8, columns: 8, baseElements: self.buttonUIName ,scene:self as! GameScene, name: "Sand")
         mecanic?.setMap()
         mecanic?.map?.name = "world"
         self.addChild(mecanic!.map!)
-        
+        self.scene?.backgroundColor = #colorLiteral(red: 0.8039215803, green: 0.8039215803, blue: 0.8039215803, alpha: 1)
     }
-    
+    func createColorize() -> SKShader {
+        let uniforms: [SKUniform] = [
+            SKUniform(name: "u_color", color: .red),
+            SKUniform(name: "u_strength", float: 0.5)
+        ]
+        
+        return SKShader(fromFile: "SHKColorize", uniforms: uniforms)
+    }
     func setCameraNode(){
         if let cam = self.childNode(withName:"SKCameraNode") as? SKCameraNode{
             self.cameraNode = cam
@@ -48,7 +54,7 @@ public class GameScene: SKScene ,ButtonElement {
         }
         let _ = groundButtonUI.map({ (node) -> [GroundButton] in
             if let spriteNode = node as? SKSpriteNode {
-                let button = GroundButton(texture: spriteNode.texture, size:CGSize(width:100, height:100), typeGround:typeforName(spriteNode.name))
+                let button = GroundButton(texture: spriteNode.texture, size:CGSize(width:50, height:50), typeGround:typeforName(spriteNode.name))
                 button.name = spriteNode.name
                 button.position = spriteNode.position
                 self.cameraNode.addChild(button)
@@ -61,12 +67,46 @@ public class GameScene: SKScene ,ButtonElement {
         })
         // init redoButton
         if let node = self.scene?.childNode(withName: "Redo") as? SKSpriteNode{
-            let buttonRedo = RedoButton(texture: node.texture, color: node.color, size: node.size)
+            let buttonRedo = ButtonEditorInMap(texture: node.texture, size: node.size , type:.undo)
             buttonRedo.position = node.position
             buttonRedo.zPosition = node.zPosition
             node.removeFromParent()
             buttonRedo.delgate = self
-            self.cameraNode.addChild(buttonRedo)
+            self.buttonUndo = buttonRedo
+            self.cameraNode.addChild(self.buttonUndo!)
+        }
+        if let node = self.scene?.childNode(withName: "Remove") as? SKSpriteNode{
+            let buttonRedo = ButtonEditorInMap(texture: node.texture , size:node.size, type:.remove)
+            buttonRedo.position = node.position
+            buttonRedo.zPosition = node.zPosition
+            node.removeFromParent()
+            buttonRedo.delgate = self
+            self.buttonRemover = buttonRedo
+            self.cameraNode.addChild(buttonRemover!)
+        }
+    }
+    public func call(type: ButtonEditor) {
+        if type == .undo {
+             self.mecanic?.deleteFromMap()
+            self.buttonUndo?.run(SKAction.init(named:"undo")!)
+        }
+        if type == .remove{
+            self.modoRemover = !self.modoRemover
+            if modoRemover {
+                colorizeNodes()
+                mecanic?.canDraw = false
+                self.backgroundColor = #colorLiteral(red: 0.9372549057, green: 0.3490196168, blue: 0.1921568662, alpha: 1)
+                self.buttonRemover?.texture = SKTexture(imageNamed: "DontSelect")
+            }
+            else {
+                dontColorizeNode()
+                mecanic?.canDraw = true
+                self.buttonRemover?.texture = SKTexture(imageNamed: "Select")
+                self.scene?.backgroundColor = #colorLiteral(red: 0.8039215803, green: 0.8039215803, blue: 0.8039215803, alpha: 1)
+            }
+        }
+        else{
+            
         }
     }
     public func sendType(ground:GroundButton) {
@@ -81,15 +121,14 @@ public class GameScene: SKScene ,ButtonElement {
             }
             return node
         }
-        
         mecanic?.setTextureTile(name: ground.typeGround.rawValue)
     }
     public func touchDown(atPoint pos : CGPoint) {
     }
     
     public func touchMoved(toPoint pos : CGPoint) {
-        //print("move")
-        //self.cameraNode.run(SKAction.moveBy(x: pos.x, y: pos.y, duration: 1))
+        
+
     }
     
     func touchUp(atPoint pos : CGPoint) {
@@ -138,6 +177,28 @@ public class GameScene: SKScene ,ButtonElement {
                 scale = mimScale
             }
             self.cameraNode.setScale(scale)
+        }
+    }
+    public func sendNodeFromRemove(node: SKNode) {
+        if modoRemover {
+            self.removeChildren(in: [node])
+            
+        }
+    }
+    func colorizeNodes(){
+        let _ = self.children.map { (node) in
+            if let sprite = node as? ObjectRemove{
+                sprite.shader = createColorize()
+                sprite.isUserInteractionEnabled = true
+            }
+        }
+    }
+    func dontColorizeNode(){
+        let _ = self.children.map { (node) in
+            if let sprite = node as? ObjectRemove{
+                sprite.shader = nil
+                sprite.isUserInteractionEnabled = false
+            }
         }
     }
 }
